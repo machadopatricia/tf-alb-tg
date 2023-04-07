@@ -17,17 +17,18 @@ data "aws_vpc" "default" {
   default = true
 }
 
-data "aws_subnet" "subnet_1b" {
-  availability_zone = "us-east-1b"
-  vpc_id = data.aws_vpc.default.id
+data "aws_subnets" "public_subnets" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+
+  tags = {
+    tier = "public"
+  }
 }
 
-data "aws_subnet" "subnet_1c" {
-  availability_zone = "us-east-1c"
-  vpc_id = data.aws_vpc.default.id
-}
-
-resource "aws_security_group" "WebAccess" {
+resource "aws_security_group" "web_access" {
   name        = "WebAccess"
   description = "Allow HTTPS to web server"
   vpc_id      = data.aws_vpc.default.id
@@ -56,39 +57,11 @@ resource "aws_security_group" "WebAccess" {
   }
 }
 
-resource "aws_security_group" "alb_sg" {
-  name_prefix = "alb-"
-  vpc_id      = data.aws_vpc.default.id
-
-  ingress {
-    from_port = 80
-    to_port   = 80
-    protocol  = "tcp"
-    cidr_blocks = [
-      "0.0.0.0/0",
-    ]
-  }
-
-  ingress {
-    from_port = 443
-    to_port   = 443
-    protocol  = "tcp"
-    cidr_blocks = [
-      "0.0.0.0/0",
-    ]
-  }
-
-  tags = {
-    Name = "alb-sg"
-  }
-}
-
 resource "aws_instance" "linux" {
-  ami             = var.ami
-  instance_type   = var.instance_type
-  security_groups = [var.security_groups]
-  user_data       = var.user_data
-  availability_zone = "us-east-1b"
+  ami               = var.ami
+  instance_type     = var.instance_type
+  security_groups   = ["WebAccess"]
+  user_data         = var.user_data
 
   tags = {
     Name   = var.instance_name
@@ -96,31 +69,29 @@ resource "aws_instance" "linux" {
   }
 }
 
-resource "aws_lb" "MyALB" {
+resource "aws_lb" "my_alb" {
   name               = var.alb_name
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = [data.aws_subnet.subnet_1b,data.aws_subnet.subnet_1c]
-
-  enable_deletion_protection = true
+  security_groups    = [aws_security_group.web_access.id]
+  subnets            = [data.aws_subnets.public_subnets.ids[0],data.aws_subnets.public_subnets.ids[1]]
 }
 
-resource "aws_lb_target_group" "alb-tg" {
-  name     = "alb-tg"
-  port     = 80
-  protocol = "HTTP"
+resource "aws_lb_target_group" "alb_tg" {
+  name        = "alb-tg"
+  port        = 80
+  protocol    = "HTTP"
   target_type = "instance"
-  vpc_id   = data.aws_vpc.default.id
+  vpc_id      = data.aws_vpc.default.id
 }
 
-resource "aws_lb_listener" "alb-listener" {
-  load_balancer_arn = aws_lb.MyALB.arn
+resource "aws_lb_listener" "alb_listener" {
+  load_balancer_arn = aws_lb.my_alb.arn
   port              = "80"
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.alb-tg.arn
+    target_group_arn = aws_lb_target_group.alb_tg.arn
   }
 }

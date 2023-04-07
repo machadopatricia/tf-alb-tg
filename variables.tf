@@ -19,11 +19,6 @@ variable "instance_type" {
   default = "t2.micro"
 }
 
-variable "security_groups" {
-  type    = string
-  default = "WebAccess"
-}
-
 variable "user_data" {
   description = "WebServer HelloWorld user data"
   type        = string
