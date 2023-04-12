@@ -57,18 +57,6 @@ resource "aws_security_group" "web_access" {
   }
 }
 
-resource "aws_instance" "linux" {
-  ami               = var.ami
-  instance_type     = var.instance_type
-  security_groups   = ["WebAccess"]
-  user_data         = var.user_data
-
-  tags = {
-    Name   = var.instance_name
-    origin = "tf"
-  }
-}
-
 resource "aws_lb" "my_alb" {
   name               = var.alb_name
   internal           = false
@@ -93,5 +81,63 @@ resource "aws_lb_listener" "alb_listener" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.alb_tg.arn
+  }
+}
+
+resource "aws_launch_template" "template_basic" {
+  name                   = var.launch_template_name
+  image_id               = var.ami
+  instance_type          = var.instance_type
+  vpc_security_group_ids = [aws_security_group.web_access.id]
+  user_data              = base64encode(var.user_data)
+
+  block_device_mappings {
+    device_name = var.block_device_name
+
+    ebs {
+      volume_size           = var.ebs_volume_size
+      delete_on_termination = true
+      volume_type           = var.ebs_volume_type
+    }
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+
+    tags = {
+      origin = "terraform"
+    }
+  }
+}
+
+resource "aws_autoscaling_group" "asg" {
+  name                      = var.asg_name
+  desired_capacity          = var.desired_capacity
+  min_size                  = var.min_size
+  max_size                  = var.max_size
+  health_check_grace_period = var.health_check_grace_period
+  //metrics are not enabling - troubleshoot
+  enabled_metrics = []
+  metrics_granularity = "1Minute"
+
+  vpc_zone_identifier = [
+    data.aws_subnets.public_subnets.ids[0],
+    data.aws_subnets.public_subnets.ids[1],
+    data.aws_subnets.public_subnets.ids[2]
+    ]
+
+  launch_template {
+    id      = aws_launch_template.template_basic.id
+    version = "$Latest"
+  }
+
+  timeouts {
+    delete = var.timeouts_delete
+  }
+
+  tag {
+    key                 = "origin"
+    value               = "terraform"
+    propagate_at_launch = true
   }
 }

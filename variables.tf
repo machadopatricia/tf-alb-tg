@@ -9,9 +9,21 @@ variable "instance_name" {
   default     = "Linux"
 }
 
+variable "alb_name" {
+  type    = string
+  default = "MyALB"
+}
+
+#### LAUNCH TEMPLATE VARIABLES ####
+
+variable "launch_template_name" {
+  type    = string
+  default = "MyLaunchTemplate"
+}
+
 variable "ami" {
   type    = string
-  default = "ami-00c39f71452c08778"
+  default = "ami-0fa1de1d60de6a97e"
 }
 
 variable "instance_type" {
@@ -32,7 +44,49 @@ variable "user_data" {
   EOF
 }
 
-variable "alb_name" {
+variable "block_device_name" {
   type    = string
-  default = "MyALB"
+  default = "/dev/xvda"
+}
+
+variable "ebs_volume_size" {
+  type    = number
+  default = 8
+}
+
+variable "ebs_volume_type" {
+  type    = string
+  default = "gp2"
+}
+
+#### AUTO SCALING GROUP VARIABLES ####
+
+variable "asg_name" {
+  type    = string
+  default = "MyASG"
+}
+
+variable "desired_capacity" {
+  type    = number
+  default = 2
+}
+
+variable "min_size" {
+  type    = number
+  default = 2
+}
+
+variable "max_size" {
+  type    = number
+  default = 4
+}
+
+variable "health_check_grace_period" {
+  type    = number
+  default = 300
+}
+
+variable "timeouts_delete" {
+  type    = string
+  default = "10m"
 }
