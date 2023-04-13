@@ -30,7 +30,7 @@ data "aws_subnets" "public_subnets" {
 
 resource "aws_security_group" "web_access" {
   name        = "WebAccess"
-  description = "Allow HTTPS to web server"
+  description = "Allow HTTP to web server"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
@@ -54,33 +54,6 @@ resource "aws_security_group" "web_access" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_lb" "my_alb" {
-  name               = var.alb_name
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.web_access.id]
-  subnets            = [data.aws_subnets.public_subnets.ids[0],data.aws_subnets.public_subnets.ids[1]]
-}
-
-resource "aws_lb_target_group" "alb_tg" {
-  name        = "alb-tg"
-  port        = 80
-  protocol    = "HTTP"
-  target_type = "instance"
-  vpc_id      = data.aws_vpc.default.id
-}
-
-resource "aws_lb_listener" "alb_listener" {
-  load_balancer_arn = aws_lb.my_alb.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.alb_tg.arn
   }
 }
 
@@ -116,15 +89,13 @@ resource "aws_autoscaling_group" "asg" {
   min_size                  = var.min_size
   max_size                  = var.max_size
   health_check_grace_period = var.health_check_grace_period
-  //metrics are not enabling - troubleshoot
-  enabled_metrics = []
-  metrics_granularity = "1Minute"
+  target_group_arns         = [aws_lb_target_group.tg_alb.arn]
 
   vpc_zone_identifier = [
     data.aws_subnets.public_subnets.ids[0],
     data.aws_subnets.public_subnets.ids[1],
     data.aws_subnets.public_subnets.ids[2]
-    ]
+  ]
 
   launch_template {
     id      = aws_launch_template.template_basic.id
@@ -140,4 +111,46 @@ resource "aws_autoscaling_group" "asg" {
     value               = "terraform"
     propagate_at_launch = true
   }
+}
+
+resource "aws_lb_target_group" "tg_alb" {
+  name        = var.tg_name
+  port        = var.tg_alb_port
+  protocol    = var.tg_alb_protocol
+  target_type = var.tg_alb_target_type
+  vpc_id      = data.aws_vpc.default.id
+
+  health_check {
+    path    = "/"
+    matcher = "200"
+  }
+}
+
+resource "aws_lb" "alb" {
+  name               = var.alb_name
+  internal           = var.alb_internal
+  load_balancer_type = var.alb_type
+  security_groups    = [aws_security_group.web_access.id]
+  subnets = [
+    data.aws_subnets.public_subnets.ids[0],
+    data.aws_subnets.public_subnets.ids[1],
+    data.aws_subnets.public_subnets.ids[2]
+  ]
+}
+
+resource "aws_lb_listener" "alb_listener" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = var.alb_listener_port
+  protocol          = var.alb_listener_protocol
+
+  default_action {
+    type             = var.alb_listener_default_action
+    target_group_arn = aws_lb_target_group.tg_alb.arn
+  }
+}
+
+resource "aws_lb_target_group_attachment" "tg_attachment" {
+  target_group_arn = aws_lb_target_group.tg_alb.arn
+  target_id        = aws_lb.alb.arn
+  port             = var.alb_listener_port
 }
