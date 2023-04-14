@@ -17,7 +17,7 @@ data "aws_vpc" "default" {
   default = true
 }
 
-data "aws_subnets" "public_subnets" {
+data "aws_subnets" "public" {
   filter {
     name   = "vpc-id"
     values = [data.aws_vpc.default.id]
@@ -26,6 +26,11 @@ data "aws_subnets" "public_subnets" {
   tags = {
     tier = "public"
   }
+}
+
+data "aws_subnet" "public" {
+  for_each = toset(data.aws_subnets.public.ids)
+  id       = each.value
 }
 
 resource "aws_security_group" "web_access" {
@@ -90,12 +95,7 @@ resource "aws_autoscaling_group" "asg" {
   max_size                  = var.max_size
   health_check_grace_period = var.health_check_grace_period
   target_group_arns         = [aws_lb_target_group.tg_alb.arn]
-
-  vpc_zone_identifier = [
-    data.aws_subnets.public_subnets.ids[0],
-    data.aws_subnets.public_subnets.ids[1],
-    data.aws_subnets.public_subnets.ids[2]
-  ]
+  vpc_zone_identifier       = [for subnet in data.aws_subnet.public : subnet.id]
 
   launch_template {
     id      = aws_launch_template.template_basic.id
@@ -131,11 +131,7 @@ resource "aws_lb" "alb" {
   internal           = var.alb_internal
   load_balancer_type = var.alb_type
   security_groups    = [aws_security_group.web_access.id]
-  subnets = [
-    data.aws_subnets.public_subnets.ids[0],
-    data.aws_subnets.public_subnets.ids[1],
-    data.aws_subnets.public_subnets.ids[2]
-  ]
+  subnets            = [for subnet in data.aws_subnet.public : subnet.id]
 }
 
 resource "aws_lb_listener" "alb_listener" {
@@ -147,10 +143,4 @@ resource "aws_lb_listener" "alb_listener" {
     type             = var.alb_listener_default_action
     target_group_arn = aws_lb_target_group.tg_alb.arn
   }
-}
-
-resource "aws_lb_target_group_attachment" "tg_attachment" {
-  target_group_arn = aws_lb_target_group.tg_alb.arn
-  target_id        = aws_lb.alb.arn
-  port             = var.alb_listener_port
 }
